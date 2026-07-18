@@ -13,10 +13,14 @@ import {
 
 const emptyFields: ResumeFieldsValue = {
   fullName: "",
-  contacts: { email: "", phone: "" },
+  age: "",
+  location: "",
+  desiredPosition: "",
+  contacts: { email: "", phone: "", telegram: "" },
   experience: [],
   education: [],
   skills: [],
+  summary: "",
 };
 
 export function ResumeNewForm() {

@@ -25,13 +25,18 @@ export const resumeEducationEntrySchema = z.object({
 
 export const resumeFieldsSchema = z.object({
   fullName: z.string().trim().min(1, "Укажите ФИО"),
+  age: z.string().trim().optional().default(""),
+  location: z.string().trim().optional().default(""),
+  desiredPosition: z.string().trim().optional().default(""),
   contacts: z.object({
     email: z.string().trim().email().optional().or(z.literal("")),
     phone: z.string().trim().optional().default(""),
+    telegram: z.string().trim().optional().default(""),
   }),
   experience: z.array(resumeExperienceEntrySchema).default([]),
   education: z.array(resumeEducationEntrySchema).default([]),
   skills: z.array(z.string().trim().min(1)).default([]),
+  summary: z.string().trim().optional().default(""),
 });
 
 export const resumeBuilderSchema = resumeFieldsSchema.extend({

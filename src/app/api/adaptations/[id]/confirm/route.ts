@@ -49,9 +49,12 @@ export async function POST(
     },
   });
 
-  // Score reflects what the user actually saved, not the original AI draft.
+  // Score reflects what the user actually saved, not the original AI draft —
+  // must key the lookup on the new resume's id, since keying on the original
+  // resume's id would hit that resume's pre-adaptation cached Analysis row
+  // and never recompute against the content actually being scored here.
   const matchAnalysis = await getOrComputeMatchAnalysis(
-    adaptation.resume.id,
+    newResume.id,
     adaptation.vacancy.id,
     parsed.data,
     adaptation.vacancy.rawText

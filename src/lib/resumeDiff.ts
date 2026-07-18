@@ -59,10 +59,26 @@ export function diffResumeVersions(
     sections.push({ label: "ФИО", before: beforeName, after: afterName });
   }
 
-  const beforeContacts = [before?.contacts?.email, before?.contacts?.phone]
+  const beforeAgeLocation = [before?.age, before?.location].filter(Boolean).join(", ");
+  const afterAgeLocation = [after?.age, after?.location].filter(Boolean).join(", ");
+  if (beforeAgeLocation !== afterAgeLocation) {
+    sections.push({ label: "Возраст и город", before: beforeAgeLocation, after: afterAgeLocation });
+  }
+
+  const beforeDesiredPosition = before?.desiredPosition ?? "";
+  const afterDesiredPosition = after?.desiredPosition ?? "";
+  if (beforeDesiredPosition !== afterDesiredPosition) {
+    sections.push({
+      label: "Желаемая должность",
+      before: beforeDesiredPosition,
+      after: afterDesiredPosition,
+    });
+  }
+
+  const beforeContacts = [before?.contacts?.email, before?.contacts?.phone, before?.contacts?.telegram]
     .filter(Boolean)
     .join(" · ");
-  const afterContacts = [after?.contacts?.email, after?.contacts?.phone]
+  const afterContacts = [after?.contacts?.email, after?.contacts?.phone, after?.contacts?.telegram]
     .filter(Boolean)
     .join(" · ");
   if (beforeContacts !== afterContacts) {
@@ -94,6 +110,12 @@ export function diffResumeVersions(
       (entry) => entry.institution || "Образование"
     )
   );
+
+  const beforeSummary = before?.summary ?? "";
+  const afterSummary = after?.summary ?? "";
+  if (beforeSummary !== afterSummary) {
+    sections.push({ label: "Обо мне", before: beforeSummary, after: afterSummary });
+  }
 
   return sections;
 }

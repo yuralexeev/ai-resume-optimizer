@@ -1,17 +1,26 @@
 // Thin abstraction over the AI provider used for vacancy analysis, resume
-// adaptation and ATS scoring. Release 2 (analysis) and Release 3 (adaptation)
-// below are implemented with deterministic mock logic, not a real Claude call
-// — but shaped exactly like a real call's output (structured content, added
-// keywords, before/after diff) so the frontend won't need to change when the
-// real Anthropic call (`claude-sonnet-4-6` via `/v1/messages`) replaces these
-// internals.
+// adaptation and ATS scoring.
 //
-// `scoreAts` (Release 4) is different: the score itself is a fixed, auditable
-// formula (keyword match + structure checklist + text density) and stays that
-// way permanently, even after the functions above get wired up to a real
-// Claude call — an ATS score should be reproducible and explainable, not an
-// LLM guess. Only the wording of its `reasons`/`recommendations` is a
-// candidate for a future AI upgrade; the `score` number itself is not.
+// `adaptResume` calls a real LLM via OpenRouter's free tier
+// (src/lib/openRouterClient.ts) and falls back silently to a deterministic
+// mock (`adaptResumeMock`) whenever the call fails, the response doesn't
+// parse, or it looks like it violates the no-fabrication rule — free-tier
+// rate limits are tight and models get delisted, so a failed AI call is
+// routine, not exceptional, and never surfaces as an error to the user.
+//
+// `extractVacancyRequirements` / `analyzeVacancyMatch` (Release 2) stay
+// deterministic mock logic — matching/analysis wasn't part of this AI swap.
+//
+// `scoreAts` (Release 4) is different on purpose: the score itself is a
+// fixed, auditable formula (keyword match + structure checklist + text
+// density) and stays that way permanently — an ATS score should be
+// reproducible and explainable, not an LLM guess. Only the wording of its
+// `reasons`/`recommendations` is a candidate for a future AI upgrade; the
+// `score` number itself is not.
+
+import { z } from "zod";
+import { callOpenRouter, type ChatMessage } from "@/lib/openRouterClient";
+import { diffResumeVersions } from "@/lib/resumeDiff";
 
 // Non-negotiable instruction injected into every resume-adaptation system
 // prompt: the model must never invent experience, skills or achievements that
@@ -100,10 +109,14 @@ export type ResumeEducationEntry = {
 };
 export type ResumeContent = {
   fullName?: string;
-  contacts?: { email?: string; phone?: string };
+  age?: string;
+  location?: string;
+  desiredPosition?: string;
+  contacts?: { email?: string; phone?: string; telegram?: string };
   skills?: string[];
   experience?: ResumeExperienceEntry[];
   education?: ResumeEducationEntry[];
+  summary?: string;
 } | null;
 
 const SPLIT_PATTERN = /[,;\n.:]+|\s+и\s+/gi;
@@ -138,6 +151,8 @@ export async function extractVacancyRequirements(
 function buildResumeSearchText(resumeContent: ResumeContent): string {
   if (!resumeContent) return "";
   const parts: string[] = [];
+  if (resumeContent.desiredPosition) parts.push(resumeContent.desiredPosition);
+  if (resumeContent.summary) parts.push(resumeContent.summary);
   if (Array.isArray(resumeContent.skills)) parts.push(...resumeContent.skills);
   if (Array.isArray(resumeContent.experience)) {
     for (const entry of resumeContent.experience) {
@@ -210,7 +225,7 @@ export async function analyzeVacancyMatch(
 
 export async function adaptResume(
   resumeContent: unknown,
-  _vacancyText: string,
+  vacancyText: string,
   matchAnalysis: MatchAnalysis
 ): Promise<AdaptationResult> {
   const original = resumeContent as ResumeContent;
@@ -218,6 +233,139 @@ export async function adaptResume(
     return { adaptedContent: original, addedKeywords: [], diff: [] };
   }
 
+  const aiResult = await tryAdaptResumeWithAi(original, vacancyText, matchAnalysis);
+  if (aiResult) return aiResult;
+
+  return adaptResumeMock(original, matchAnalysis);
+}
+
+const aiAdaptationResponseSchema = z.object({
+  fullName: z.string().optional(),
+  age: z.string().optional(),
+  location: z.string().optional(),
+  desiredPosition: z.string().optional(),
+  contacts: z
+    .object({ email: z.string().optional(), phone: z.string().optional(), telegram: z.string().optional() })
+    .optional(),
+  skills: z.array(z.string()).optional(),
+  experience: z
+    .array(
+      z.object({
+        company: z.string().optional(),
+        role: z.string().optional(),
+        period: z.string().optional(),
+        description: z.string().optional(),
+      })
+    )
+    .optional(),
+  education: z
+    .array(
+      z.object({
+        institution: z.string().optional(),
+        degree: z.string().optional(),
+        period: z.string().optional(),
+      })
+    )
+    .optional(),
+  summary: z.string().optional(),
+  addedKeywords: z.array(z.string()).default([]),
+});
+
+function buildAdaptationSystemPrompt(): string {
+  return (
+    "Ты — ассистент, который адаптирует резюме под конкретную вакансию.\n" +
+    `${NO_FABRICATION_RULE}\n` +
+    "Верни ТОЛЬКО валидный JSON без markdown и комментариев со следующими полями:\n" +
+    '{"fullName": string, "age": string, "location": string, "desiredPosition": string, ' +
+    '"contacts": {"email": string, "phone": string, "telegram": string}, ' +
+    '"skills": string[], ' +
+    '"experience": [{"company": string, "role": string, "period": string, "description": string}], ' +
+    '"education": [{"institution": string, "degree": string, "period": string}], ' +
+    '"summary": string, ' +
+    '"addedKeywords": string[]}\n' +
+    "Поля age, location, desiredPosition, contacts, summary переноси из исходного резюме без изменений, " +
+    "если только они не мешают формулировкам под вакансию (например, desiredPosition можно оставить как есть — " +
+    "не выдумывай желаемую должность, если её не было). " +
+    "Сохрани количество и порядок пунктов опыта и образования как в исходном резюме — не добавляй новые пункты. " +
+    "Переформулируй описания опыта под требования вакансии и расставь приоритет навыков под неё. " +
+    "Резюме проверяют по совпадению ключевых слов с вакансией — это самый весомый фактор оценки, поэтому: " +
+    "навыки и формулировки опыта из списка «Совпадающие навыки» (они уже подтверждённо присутствуют в резюме) " +
+    "обязательно приведи дословно так, как они звучат в вакансии — добавь их в skills и/или вплети точную формулировку " +
+    "в описание опыта, если это не искажает факты. Список «Отсутствующие в резюме требования вакансии» — это то, " +
+    "чего в резюме на самом деле нет; никогда не добавляй эти пункты в skills или опыт, добавлять их запрещено правилом выше. " +
+    "В addedKeywords перечисли ключевые слова из вакансии, которые ты подчеркнул или добавил в текст."
+  );
+}
+
+function buildAdaptationUserPrompt(
+  original: NonNullable<ResumeContent>,
+  vacancyText: string,
+  matchAnalysis: MatchAnalysis
+): string {
+  return (
+    `Резюме (JSON): ${JSON.stringify(original)}\n\n` +
+    `Вакансия: ${vacancyText}\n\n` +
+    `Совпадающие навыки: ${matchAnalysis.matchedSkills.join(", ") || "нет"}\n` +
+    `Отсутствующие в резюме требования вакансии: ${matchAnalysis.missingSkills.join(", ") || "нет"}`
+  );
+}
+
+async function tryAdaptResumeWithAi(
+  original: NonNullable<ResumeContent>,
+  vacancyText: string,
+  matchAnalysis: MatchAnalysis
+): Promise<AdaptationResult | null> {
+  const messages: ChatMessage[] = [
+    { role: "system", content: buildAdaptationSystemPrompt() },
+    { role: "user", content: buildAdaptationUserPrompt(original, vacancyText, matchAnalysis) },
+  ];
+
+  const response = await callOpenRouter(messages);
+  if (!response.success) return null;
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(response.content);
+  } catch {
+    return null;
+  }
+
+  const parsed = aiAdaptationResponseSchema.safeParse(parsedJson);
+  if (!parsed.success) return null;
+
+  // No-fabrication guard: rephrasing existing entries is fine, inventing new
+  // ones is not — treat a longer list than the original as a rule violation
+  // and fall back to the deterministic mock instead of trusting it.
+  if (
+    (parsed.data.experience?.length ?? 0) > (original.experience?.length ?? 0) ||
+    (parsed.data.education?.length ?? 0) > (original.education?.length ?? 0)
+  ) {
+    return null;
+  }
+
+  const adaptedContent: NonNullable<ResumeContent> = {
+    fullName: parsed.data.fullName ?? original.fullName,
+    age: parsed.data.age ?? original.age,
+    location: parsed.data.location ?? original.location,
+    desiredPosition: parsed.data.desiredPosition ?? original.desiredPosition,
+    contacts: parsed.data.contacts ?? original.contacts,
+    skills: parsed.data.skills ?? original.skills,
+    experience: parsed.data.experience ?? original.experience,
+    education: parsed.data.education ?? original.education,
+    summary: parsed.data.summary ?? original.summary,
+  };
+
+  return {
+    adaptedContent,
+    addedKeywords: parsed.data.addedKeywords,
+    diff: diffResumeVersions(original, adaptedContent),
+  };
+}
+
+function adaptResumeMock(
+  original: NonNullable<ResumeContent>,
+  matchAnalysis: MatchAnalysis
+): AdaptationResult {
   const adapted: NonNullable<ResumeContent> = JSON.parse(JSON.stringify(original));
   const diff: DiffSection[] = [];
   const addedKeywords: string[] = [];

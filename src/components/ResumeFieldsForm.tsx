@@ -13,10 +13,14 @@ export type EducationEntry = { institution: string; degree: string; period: stri
 
 export type ResumeFieldsValue = {
   fullName: string;
-  contacts: { email: string; phone: string };
+  age: string;
+  location: string;
+  desiredPosition: string;
+  contacts: { email: string; phone: string; telegram: string };
   experience: ExperienceEntry[];
   education: EducationEntry[];
   skills: string[];
+  summary: string;
 };
 
 export type ResumeFieldsHandle = { getValue: () => ResumeFieldsValue };
@@ -31,26 +35,35 @@ const emptyEducation: EducationEntry = { institution: "", degree: "", period: ""
 export const ResumeFieldsForm = forwardRef<ResumeFieldsHandle, { initialValue: ResumeFieldsValue }>(
   function ResumeFieldsForm({ initialValue }, ref) {
     const [fullName, setFullName] = useState(initialValue.fullName);
+    const [age, setAge] = useState(initialValue.age);
+    const [location, setLocation] = useState(initialValue.location);
+    const [desiredPosition, setDesiredPosition] = useState(initialValue.desiredPosition);
     const [email, setEmail] = useState(initialValue.contacts.email);
     const [phone, setPhone] = useState(initialValue.contacts.phone);
+    const [telegram, setTelegram] = useState(initialValue.contacts.telegram);
     const [experience, setExperience] = useState<ExperienceEntry[]>(
       initialValue.experience.length ? initialValue.experience : [emptyExperience]
     );
     const [education, setEducation] = useState<EducationEntry[]>(
       initialValue.education.length ? initialValue.education : [emptyEducation]
     );
-    const [skillsText, setSkillsText] = useState(initialValue.skills.join(", "));
+    const [skillsText, setSkillsText] = useState(initialValue.skills.join("\n"));
+    const [summary, setSummary] = useState(initialValue.summary);
 
     useImperativeHandle(ref, () => ({
       getValue: () => ({
         fullName,
-        contacts: { email, phone },
+        age,
+        location,
+        desiredPosition,
+        contacts: { email, phone, telegram },
         experience,
         education,
         skills: skillsText
-          .split(",")
+          .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
+        summary,
       }),
     }));
 
@@ -61,6 +74,25 @@ export const ResumeFieldsForm = forwardRef<ResumeFieldsHandle, { initialValue: R
           <Input id="fullName" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="age">Возраст</Label>
+            <Input id="age" value={age} onChange={(e) => setAge(e.target.value)} placeholder="33 года" />
+          </div>
+          <div>
+            <Label htmlFor="location">Город</Label>
+            <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Москва" />
+          </div>
+        </div>
+        <div>
+          <Label htmlFor="desiredPosition">Желаемая должность</Label>
+          <Input
+            id="desiredPosition"
+            value={desiredPosition}
+            onChange={(e) => setDesiredPosition(e.target.value)}
+            placeholder="Product manager, BizDev"
+          />
+        </div>
+        <div className="grid grid-cols-3 gap-3">
           <div>
             <Label htmlFor="contactEmail">Email</Label>
             <Input
@@ -73,6 +105,15 @@ export const ResumeFieldsForm = forwardRef<ResumeFieldsHandle, { initialValue: R
           <div>
             <Label htmlFor="contactPhone">Телефон</Label>
             <Input id="contactPhone" value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+          <div>
+            <Label htmlFor="contactTelegram">Telegram</Label>
+            <Input
+              id="contactTelegram"
+              value={telegram}
+              onChange={(e) => setTelegram(e.target.value)}
+              placeholder="@username"
+            />
           </div>
         </div>
 
@@ -203,13 +244,24 @@ export const ResumeFieldsForm = forwardRef<ResumeFieldsHandle, { initialValue: R
         </div>
 
         <div>
-          <Label htmlFor="skills">Навыки (через запятую)</Label>
+          <Label htmlFor="skills">Ключевые навыки (каждый пункт с новой строки)</Label>
           <Textarea
             id="skills"
-            rows={2}
+            rows={4}
             value={skillsText}
             onChange={(e) => setSkillsText(e.target.value)}
-            placeholder="React, TypeScript, коммуникация"
+            placeholder={"React, TypeScript\nОпыт управления командой до 10 человек"}
+          />
+        </div>
+
+        <div>
+          <Label htmlFor="summary">Обо мне</Label>
+          <Textarea
+            id="summary"
+            rows={4}
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            placeholder="Дополнительная информация о себе, достижения вне работы и т.д."
           />
         </div>
       </div>

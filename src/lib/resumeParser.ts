@@ -21,22 +21,33 @@ export type ParsedEducationEntry = {
 
 export type ParsedResumeContent = {
   fullName: string;
-  contacts: { email: string; phone: string };
+  age: string;
+  location: string;
+  desiredPosition: string;
+  contacts: { email: string; phone: string; telegram: string };
   experience: ParsedExperienceEntry[];
   education: ParsedEducationEntry[];
   skills: string[];
+  summary: string;
 };
 
 const EXPERIENCE_HEADER = /^(опыт\s*работы|опыт|experience|work experience)\s*:?\s*$/i;
 const EDUCATION_HEADER = /^(образование|education)\s*:?\s*$/i;
 const SKILLS_HEADER = /^(ключевые\s*навыки|навыки|skills)\s*:?\s*$/i;
+const SUMMARY_HEADER = /^(обо\s*мне|о\s*себе|about\s*me)\s*:?\s*$/i;
 
 const EMAIL_RE = /[\w.+-]+@[\w-]+\.[\w.-]+/;
 const PHONE_RE = /(\+?\d[\d\s\-()]{7,}\d)/;
+const AGE_LOCATION_RE = /^(\d{1,2}\s*(?:лет|года|год))\s*,\s*(.+)$/i;
+const AGE_ONLY_RE = /^(\d{1,2}\s*(?:лет|года|год))\s*$/i;
+const LOCATION_LABEL_RE = /^(?:город|location)\s*:\s*(.+)$/i;
+const DESIRED_POSITION_RE = /^(?:желаемая\s+должность|должность)\s*:\s*(.+)$/i;
+const TELEGRAM_LABEL_RE = /(?:tg|telegram)\s*:?\s*(@\w+)/i;
+const BARE_TELEGRAM_RE = /(@[a-zA-Z]\w{3,})/;
 // "Company — Role (period)" / "Company - Role (period)", loosely
 const ENTRY_HEADER_RE = /^(.+?)\s*[—–-]\s*(.+?)\s*\(([^)]+)\)\s*$/;
 
-type Section = "none" | "experience" | "education" | "skills";
+type Section = "none" | "experience" | "education" | "skills" | "summary";
 
 function splitIntoParagraphs(lines: string[]): string[] {
   const paragraphs: string[] = [];
@@ -94,14 +105,55 @@ function parseSkills(block: string): string[] {
   return skills;
 }
 
-function guessFullName(headerLines: string[]): string {
-  for (const line of headerLines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.length > 60) continue;
-    if (EMAIL_RE.test(trimmed) || PHONE_RE.test(trimmed)) continue;
-    return trimmed;
+function extractHeaderFields(headerLines: string[]): {
+  fullName: string;
+  age: string;
+  location: string;
+  desiredPosition: string;
+  telegram: string;
+} {
+  let fullName = "";
+  let age = "";
+  let location = "";
+  let desiredPosition = "";
+  let telegram = "";
+
+  for (const raw of headerLines) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+
+    const ageLocationMatch = trimmed.match(AGE_LOCATION_RE);
+    if (ageLocationMatch) {
+      age ||= ageLocationMatch[1].trim();
+      location ||= ageLocationMatch[2].trim();
+      continue;
+    }
+    const ageOnlyMatch = trimmed.match(AGE_ONLY_RE);
+    if (ageOnlyMatch) {
+      age ||= ageOnlyMatch[1].trim();
+      continue;
+    }
+    const locationLabelMatch = trimmed.match(LOCATION_LABEL_RE);
+    if (locationLabelMatch) {
+      location ||= locationLabelMatch[1].trim();
+      continue;
+    }
+    const desiredPositionMatch = trimmed.match(DESIRED_POSITION_RE);
+    if (desiredPositionMatch) {
+      desiredPosition ||= desiredPositionMatch[1].trim();
+      continue;
+    }
+    const telegramMatch = trimmed.match(TELEGRAM_LABEL_RE) ?? trimmed.match(BARE_TELEGRAM_RE);
+    if (telegramMatch) {
+      telegram ||= telegramMatch[1];
+      continue;
+    }
+    if (!fullName && trimmed.length <= 60 && !EMAIL_RE.test(trimmed) && !PHONE_RE.test(trimmed)) {
+      fullName = trimmed;
+    }
   }
-  return "";
+
+  return { fullName, age, location, desiredPosition, telegram };
 }
 
 export function parseResumeText(text: string): ParsedResumeContent {
@@ -112,6 +164,7 @@ export function parseResumeText(text: string): ParsedResumeContent {
     experience: [],
     education: [],
     skills: [],
+    summary: [],
   };
 
   let current: Section = "none";
@@ -129,20 +182,31 @@ export function parseResumeText(text: string): ParsedResumeContent {
       current = "skills";
       continue;
     }
+    if (SUMMARY_HEADER.test(trimmed)) {
+      current = "summary";
+      continue;
+    }
     buckets[current].push(line);
   }
 
   const emailMatch = text.match(EMAIL_RE);
   const phoneMatch = text.match(PHONE_RE);
+  const headerFields = extractHeaderFields(buckets.none);
+  const telegram = headerFields.telegram || (text.match(TELEGRAM_LABEL_RE) ?? text.match(BARE_TELEGRAM_RE))?.[1] || "";
 
   return {
-    fullName: guessFullName(buckets.none),
+    fullName: headerFields.fullName,
+    age: headerFields.age,
+    location: headerFields.location,
+    desiredPosition: headerFields.desiredPosition,
     contacts: {
       email: emailMatch?.[0] ?? "",
       phone: phoneMatch?.[0]?.trim() ?? "",
+      telegram,
     },
     experience: splitIntoParagraphs(buckets.experience).map(parseExperienceParagraph),
     education: splitIntoParagraphs(buckets.education).map(parseEducationParagraph),
     skills: parseSkills(buckets.skills.join("\n")),
+    summary: buckets.summary.join("\n").trim(),
   };
 }

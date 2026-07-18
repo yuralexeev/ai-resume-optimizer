@@ -26,7 +26,10 @@ export async function renderResumeDocx(
   const experience = content.experience ?? [];
   const education = content.education ?? [];
   const skills = content.skills ?? [];
-  const contactsLine = [content.contacts?.email, content.contacts?.phone].filter(Boolean).join(" · ");
+  const ageLocationLine = [content.age, content.location].filter(Boolean).join(", ");
+  const contactsLine = [content.contacts?.email, content.contacts?.phone, content.contacts?.telegram]
+    .filter(Boolean)
+    .join(" · ");
 
   const children: Paragraph[] = [
     new Paragraph({
@@ -35,6 +38,17 @@ export async function renderResumeDocx(
     }),
   ];
 
+  if (ageLocationLine) {
+    children.push(textParagraph(ageLocationLine, { after: 40 }));
+  }
+  if (content.desiredPosition) {
+    children.push(
+      new Paragraph({
+        children: [new TextRun({ text: content.desiredPosition, font: FONT, bold: true })],
+        spacing: { after: 100 },
+      })
+    );
+  }
   if (contactsLine) {
     children.push(textParagraph(contactsLine, { after: 200 }));
   }
@@ -90,10 +104,24 @@ export async function renderResumeDocx(
     children.push(
       new Paragraph({
         heading: HeadingLevel.HEADING_1,
-        children: [new TextRun({ text: "Навыки", font: FONT })],
+        children: [new TextRun({ text: "Ключевые навыки", font: FONT })],
       })
     );
-    children.push(textParagraph(skills.join(", ")));
+    for (const skill of skills) {
+      children.push(textParagraph(`• ${skill}`, { after: 40 }));
+    }
+  }
+
+  if (content.summary) {
+    children.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        children: [new TextRun({ text: "Обо мне", font: FONT })],
+      })
+    );
+    for (const line of content.summary.split("\n")) {
+      if (line.trim()) children.push(textParagraph(line, { after: 40 }));
+    }
   }
 
   const doc = new Document({

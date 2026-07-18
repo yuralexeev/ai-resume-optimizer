@@ -36,13 +36,18 @@ export default async function AdaptationPage({
 
   const initialValue: ResumeFieldsValue = {
     fullName: adaptedContent?.fullName ?? "",
+    age: adaptedContent?.age ?? "",
+    location: adaptedContent?.location ?? "",
+    desiredPosition: adaptedContent?.desiredPosition ?? "",
     contacts: {
       email: adaptedContent?.contacts?.email ?? "",
       phone: adaptedContent?.contacts?.phone ?? "",
+      telegram: adaptedContent?.contacts?.telegram ?? "",
     },
     experience: adaptedContent?.experience ?? [],
     education: adaptedContent?.education ?? [],
     skills: adaptedContent?.skills ?? [],
+    summary: adaptedContent?.summary ?? "",
   };
 
   return (

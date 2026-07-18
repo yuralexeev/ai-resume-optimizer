@@ -14,11 +14,18 @@ export function ResumePreview({
   const experience = content.experience ?? [];
   const education = content.education ?? [];
   const skills = content.skills ?? [];
-  const contactsLine = [content.contacts?.email, content.contacts?.phone].filter(Boolean).join(" · ");
+  const ageLocationLine = [content.age, content.location].filter(Boolean).join(", ");
+  const contactsLine = [content.contacts?.email, content.contacts?.phone, content.contacts?.telegram]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="rounded-2xl border border-black/5 bg-white p-8 shadow-sm">
       <h2 className="text-xl font-semibold text-brand-dark">{content.fullName || title}</h2>
+      {ageLocationLine && <p className="mt-1 text-sm text-black/50">{ageLocationLine}</p>}
+      {content.desiredPosition && (
+        <p className="mt-1 text-sm font-medium text-brand-mint">{content.desiredPosition}</p>
+      )}
       {contactsLine && <p className="mt-1 text-sm text-black/50">{contactsLine}</p>}
 
       {experience.length > 0 && (
@@ -65,9 +72,22 @@ export function ResumePreview({
       {skills.length > 0 && (
         <section className="mt-6">
           <h3 className="border-b border-black/10 pb-1.5 text-sm font-semibold text-brand-dark">
-            Навыки
+            Ключевые навыки
           </h3>
-          <p className="mt-3 text-sm text-black/70">{skills.join(", ")}</p>
+          <ul className="mt-3 space-y-1 text-sm text-black/70">
+            {skills.map((skill, i) => (
+              <li key={i}>• {skill}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {content.summary && (
+        <section className="mt-6">
+          <h3 className="border-b border-black/10 pb-1.5 text-sm font-semibold text-brand-dark">
+            Обо мне
+          </h3>
+          <p className="mt-3 whitespace-pre-line text-sm text-black/70">{content.summary}</p>
         </section>
       )}
     </div>

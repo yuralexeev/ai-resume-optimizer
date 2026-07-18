@@ -20,6 +20,17 @@ const styles = StyleSheet.create({
     color: "#5b6770",
     marginBottom: 16,
   },
+  ageLocation: {
+    fontSize: 10,
+    color: "#5b6770",
+    marginBottom: 2,
+  },
+  desiredPosition: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: "#3f9a80",
+    marginBottom: 4,
+  },
   sectionHeading: {
     fontSize: 13,
     fontWeight: "bold",
@@ -55,12 +66,19 @@ function ResumeDocument({ content, title }: { content: NonNullable<ResumeContent
   const experience = content.experience ?? [];
   const education = content.education ?? [];
   const skills = content.skills ?? [];
-  const contactsLine = [content.contacts?.email, content.contacts?.phone].filter(Boolean).join(" · ");
+  const ageLocationLine = [content.age, content.location].filter(Boolean).join(", ");
+  const contactsLine = [content.contacts?.email, content.contacts?.phone, content.contacts?.telegram]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <Document title={title}>
       <Page size="A4" style={styles.page}>
         <Text style={styles.name}>{content.fullName || title}</Text>
+        {ageLocationLine ? <Text style={styles.ageLocation}>{ageLocationLine}</Text> : null}
+        {content.desiredPosition ? (
+          <Text style={styles.desiredPosition}>{content.desiredPosition}</Text>
+        ) : null}
         {contactsLine ? <Text style={styles.contacts}>{contactsLine}</Text> : null}
 
         {experience.length > 0 && (
@@ -98,10 +116,21 @@ function ResumeDocument({ content, title }: { content: NonNullable<ResumeContent
 
         {skills.length > 0 && (
           <View>
-            <Text style={styles.sectionHeading}>Навыки</Text>
-            <Text style={styles.skills}>{skills.join(", ")}</Text>
+            <Text style={styles.sectionHeading}>Ключевые навыки</Text>
+            {skills.map((skill, i) => (
+              <Text key={i} style={styles.skills}>
+                • {skill}
+              </Text>
+            ))}
           </View>
         )}
+
+        {content.summary ? (
+          <View>
+            <Text style={styles.sectionHeading}>Обо мне</Text>
+            <Text style={styles.entryDescription}>{content.summary}</Text>
+          </View>
+        ) : null}
       </Page>
     </Document>
   );
