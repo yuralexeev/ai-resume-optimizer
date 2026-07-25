@@ -7,6 +7,10 @@ RUN npm install --no-audit --no-fund
 
 FROM node:22-alpine AS builder
 WORKDIR /app
+# Placeholders for `next build` only (page-data collection imports db).
+# Real secrets must be set on the Dockhost container at runtime.
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
+ENV JWT_SECRET="build-time-placeholder"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate && npm run build
