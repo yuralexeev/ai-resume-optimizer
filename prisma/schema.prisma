@@ -7,7 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
@@ -21,6 +21,8 @@ model User {
   resumes       Resume[]
   vacancies     Vacancy[]
   subscriptions Subscription[]
+
+  @@map("users")
 }
 
 model Subscription {
